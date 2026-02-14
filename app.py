@@ -4,166 +4,150 @@ import os
 import sys
 sys.path.append(os.path.dirname(__file__))
 
-
-from engine.directional_engine import calculate_directional_score
-from engine.regime_engine import detect_regime
+from engine.state_manager import load_state, save_state, reset_daily_if_needed, update_streak
+from engine.regime_engine import calculate_regime
+from engine.directional_engine import calculate_direction
 from engine.execution_engine import generate_execution_plan
 from engine.risk_engine import calculate_risk
-from engine.state_manager import load_state, save_state, reset_daily_if_needed
-from engine.logger import log_trade
 from engine.statistics_engine import compute_stats
+from engine.logger import log_trade
 
 DATA_DIR = "data"
 LOG_FILE = os.path.join(DATA_DIR, "trade_log.csv")
 
 st.set_page_config(layout="centered")
-st.title("📱 Mini Institutional Futures Engine")
+st.title("📱 Futures Institutional Engine")
 
+# =========================
+# LOAD STATE
+# =========================
 state = load_state()
 state = reset_daily_if_needed(state)
 
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
+if "execution_plan" not in st.session_state:
+    st.session_state.execution_plan = None
+if "risk_plan" not in st.session_state:
+    st.session_state.risk_plan = None
+
 tab1, tab2, tab3 = st.tabs(["Analyze", "Trade Log", "Statistics"])
 
-# ==============================
+# =========================
 # TAB 1 — ANALYZE
-# ==============================
+# =========================
 with tab1:
 
     st.subheader("Account Snapshot")
-    st.metric("Equity", f"${round(state['equity'],2)}")
-    st.metric("Leverage", f"{state['leverage']}x")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Equity", f"${round(state['equity'],2)}")
+    col2.metric("Daily Loss", f"${round(state['daily_loss'],2)}")
+    col3.metric("Streak", state["current_streak"])
 
     st.divider()
 
-    # ===== INPUT =====
+    # INPUTS
     pair = st.text_input("Pair", "BTCUSDT")
-    execution = st.radio("Execution", ["Intraday", "Scalping"])
-    price = st.number_input("Current Price", value=0.0)
+    execution = st.radio("Execution Profile", ["Intraday", "Scalping"])
 
-    st.subheader("Structure")
     trend = st.selectbox("Trend", ["Uptrend", "Downtrend"])
-    hl = st.number_input("Last HL / LH", value=0.0)
-    hh = st.number_input("Last HH / LL", value=0.0)
-    break_confirmed = st.checkbox("Break Confirmed")
+    last_hl = st.number_input("Last HL (or LH)", value=0.0)
+    last_hh = st.number_input("Last HH (or LL)", value=0.0)
 
-    st.subheader("Positioning")
-    funding = st.number_input("Funding (%)", value=0.0)
+    funding = st.number_input("Funding Rate (%)", value=0.0)
     oi_trend = st.selectbox("OI Trend", ["Rising", "Falling", "Flat"])
-    ls_ratio = st.number_input("L/S Ratio", value=1.0)
-
-    st.subheader("Context")
     rsi = st.number_input("RSI (10)", value=50.0)
-    high_24 = st.number_input("24h High", value=0.0)
-    low_24 = st.number_input("24h Low", value=0.0)
-    change_24 = st.number_input("24h % Change", value=0.0)
-    volume_24 = st.number_input("24h Volume (USDT)", value=0.0)
 
-    st.subheader("Micro Confirmation")
-    micro = st.selectbox("Confirmation Strength", ["None", "Weak", "Strong"])
+    st.divider()
 
+    # =========================
+    # ANALYZE BUTTON
+    # =========================
     if st.button("Analyze"):
 
-        data = {
-            "trend": trend,
-            "price": price,
-            "hl": hl,
-            "hh": hh,
-            "break_confirmed": break_confirmed,
-            "funding": funding,
-            "oi_trend": oi_trend,
-            "ls_ratio": ls_ratio,
-            "rsi": rsi,
-            "high_24": high_24,
-            "low_24": low_24,
-            "micro": micro
-        }
+        regime = calculate_regime(funding, oi_trend, rsi)
+        direction = calculate_direction(trend, regime)
 
-        score, breakdown = calculate_directional_score(data)
-
-        if score >= 70:
-            verdict = "🟢 GO"
-        elif score >= 60:
-            verdict = "🟡 Conditional"
-        else:
-            verdict = "🔴 NO-GO"
-
-        regime = detect_regime(volume_24, change_24, oi_trend, funding)
-        plan = generate_execution_plan(data)
-        risk = calculate_risk(
-            state["equity"],
-            (plan["entry_low"] + plan["entry_high"]) / 2,
-            plan["sl"],
-            plan["tp1"],
-            leverage=state["leverage"],
-            risk_percent=state["risk_percent"]
+        execution_plan = generate_execution_plan(
+            trend,
+            last_hl,
+            last_hh,
+            regime["heat_score"]
         )
 
-        st.subheader("Result")
-        st.metric("Composite Score", f"{score} / 100")
-        st.markdown(f"### {verdict}")
-        st.write("Regime:", regime)
+        risk_plan = calculate_risk(
+            state["equity"],
+            state["risk_percent"],
+            state["leverage"],
+            execution_plan["entry"],
+            execution_plan["sl"],
+            execution_plan["tp"]
+        )
+
+        st.session_state.analysis_result = {
+            "regime": regime,
+            "direction": direction
+        }
+
+        st.session_state.execution_plan = execution_plan
+        st.session_state.risk_plan = risk_plan
+
+    # =========================
+    # DISPLAY RESULTS
+    # =========================
+    if st.session_state.analysis_result:
+
+        regime = st.session_state.analysis_result["regime"]
+        execution_plan = st.session_state.execution_plan
+        risk_plan = st.session_state.risk_plan
+
+        st.subheader("Market Regime")
+        st.write(regime)
 
         st.subheader("Execution Plan")
-        st.write({
-            "Entry Zone": f"{round(plan['entry_low'],6)} – {round(plan['entry_high'],6)}",
-            "Stop": round(plan["sl"],6),
-            "TP1": round(plan["tp1"],6)
-        })
+        st.write(execution_plan)
 
-        if risk:
-            st.subheader("Risk Plan (5x)")
-            st.write({
-                "Risk": round(risk["risk_amount"],2),
-                "Position Size": round(risk["position_size"],2),
-                "Margin": round(risk["margin"],2),
-                "R:R": round(risk["rr"],2)
-            })
+        if risk_plan:
+            st.subheader("Risk Plan (1% / 5x)")
+            st.write(risk_plan)
 
-        with st.expander("Advanced Breakdown"):
-            st.write(breakdown)
+            r_input = st.number_input("R-Multiple Result", value=0.0)
 
-        if st.button("Save Trade"):
-            log_trade({
-                "Pair": pair,
-                "Score": score,
-                "Verdict": verdict,
-                "Regime": regime,
-                "R": 0
-            })
-            st.success("Trade Saved")
+            if st.button("Save Trade"):
 
-        st.subheader("Close Trade")
-        r_value = st.number_input("R Multiple", value=0.0)
+                pnl = risk_plan["risk_amount"] * r_input
+                new_equity = state["equity"] + pnl
 
-        if st.button("Update Equity"):
-            risk_amount = state["equity"] * (state["risk_percent"] / 100)
-            state["equity"] += risk_amount * r_value
-            save_state(state)
+                if r_input < 0:
+                    state["daily_loss"] += abs(pnl)
 
-            log_trade({
-                "Pair": pair,
-                "Score": score,
-                "Verdict": verdict,
-                "Regime": regime,
-                "R": r_value
-            })
+                state["equity"] = new_equity
+                update_streak(state, r_input)
+                save_state(state)
 
-            st.success(f"Equity Updated → ${round(state['equity'],2)}")
+                log_trade(
+                    pair,
+                    regime["phase"],
+                    r_input,
+                    new_equity
+                )
 
-# ==============================
+                st.success(f"Trade Saved. Equity → ${round(new_equity,2)}")
+
+# =========================
 # TAB 2 — TRADE LOG
-# ==============================
+# =========================
 with tab2:
     if os.path.exists(LOG_FILE):
         df = pd.read_csv(LOG_FILE)
         st.dataframe(df)
         st.download_button("Download CSV", df.to_csv(index=False), "trade_log.csv")
     else:
-        st.write("No trades logged yet.")
+        st.write("No Trade Logs Yet.")
 
-# ==============================
+# =========================
 # TAB 3 — STATISTICS
-# ==============================
+# =========================
 with tab3:
     if os.path.exists(LOG_FILE):
         df = pd.read_csv(LOG_FILE)
@@ -174,5 +158,8 @@ with tab3:
             st.metric("Winrate (%)", round(stats["winrate"],2))
             st.metric("Average R", round(stats["avg_r"],2))
             st.metric("Expectancy", round(stats["expectancy"],2))
+
+            df["Cumulative_R"] = df["R"].cumsum()
+            st.line_chart(df["Cumulative_R"])
     else:
-        st.write("No statistics yet.")
+        st.write("No Statistics Yet.")
