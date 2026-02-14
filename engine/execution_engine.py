@@ -1,29 +1,16 @@
-def calculate_risk(equity, risk_percent, leverage, entry, sl, tp):
+def generate_execution_plan(data):
+    price = data["price"]
+    hl = data["hl"]
+    hh = data["hh"]
 
-    risk_amount = equity * (risk_percent / 100)
-    risk_per_unit = abs(entry - sl)
-
-    if risk_per_unit == 0:
-        return None
-
-    position_size = risk_amount / risk_per_unit
-    notional = position_size * entry
-    margin = notional / leverage
-    potential_profit = abs(tp - entry) * position_size
-    rr = potential_profit / risk_amount
-
-    warnings = []
-    if rr < 1.5:
-        warnings.append("Low R:R (<1.5)")
-    if margin > equity * 0.3:
-        warnings.append("High exposure (>30%)")
+    entry_low = hl * 1.002
+    entry_high = hl * 1.004
+    sl = hl * 0.996
+    tp1 = hh
 
     return {
-        "risk_amount": risk_amount,
-        "position_size": position_size,
-        "notional": notional,
-        "margin": margin,
-        "potential_profit": potential_profit,
-        "rr": rr,
-        "warnings": warnings
+        "entry_low": entry_low,
+        "entry_high": entry_high,
+        "sl": sl,
+        "tp1": tp1
     }
