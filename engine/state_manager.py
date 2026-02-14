@@ -8,13 +8,10 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")
 DEFAULT_STATE = {
     "equity": 1000.0,
     "risk_percent": 1.0,
-    "max_daily_loss_percent": 3.0,
-    "leverage": 5.0,
+    "leverage": 5,
     "daily_loss": 0.0,
-    "last_trade_date": str(datetime.now().date()),
     "current_streak": 0,
-    "max_win_streak": 0,
-    "max_loss_streak": 0
+    "last_trade_date": str(datetime.now().date())
 }
 
 def ensure_data_dir():
@@ -41,18 +38,3 @@ def reset_daily_if_needed(state):
         state["last_trade_date"] = today
         save_state(state)
     return state
-
-def update_streak(state, r):
-    if r > 0:
-        if state["current_streak"] >= 0:
-            state["current_streak"] += 1
-        else:
-            state["current_streak"] = 1
-        state["max_win_streak"] = max(state["max_win_streak"], state["current_streak"])
-    elif r < 0:
-        if state["current_streak"] <= 0:
-            state["current_streak"] -= 1
-        else:
-            state["current_streak"] = -1
-        state["max_loss_streak"] = min(state["max_loss_streak"], state["current_streak"])
-    save_state(state)
