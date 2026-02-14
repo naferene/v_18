@@ -1,8 +1,6 @@
 import pandas as pd
 
-
-def compute_statistics(df):
-
+def compute_stats(df):
     if df.empty:
         return None
 
@@ -10,7 +8,7 @@ def compute_statistics(df):
     wins = df[df["R"] > 0]
     losses = df[df["R"] < 0]
 
-    winrate = (len(wins) / total) * 100
+    winrate = len(wins) / total * 100
     avg_r = df["R"].mean()
 
     avg_win = wins["R"].mean() if not wins.empty else 0
@@ -18,12 +16,12 @@ def compute_statistics(df):
 
     expectancy = (len(wins)/total * avg_win) + (len(losses)/total * avg_loss)
 
-    breakdown = df.groupby("Scenario")["R"].mean().to_dict()
+    scenario_breakdown = df.groupby("Scenario")["R"].mean().to_dict()
 
     df["Prob_Bucket"] = pd.cut(
         df["Probability"],
-        bins=[0, 40, 60, 80, 100],
-        labels=["Low", "Medium", "Medium-High", "High"]
+        bins=[0,40,60,80,100],
+        labels=["Low","Medium","Medium-High","High"]
     )
 
     prob_breakdown = df.groupby("Prob_Bucket")["R"].mean().to_dict()
@@ -33,6 +31,6 @@ def compute_statistics(df):
         "winrate": winrate,
         "avg_r": avg_r,
         "expectancy": expectancy,
-        "scenario_breakdown": breakdown,
+        "scenario_breakdown": scenario_breakdown,
         "probability_breakdown": prob_breakdown
     }
