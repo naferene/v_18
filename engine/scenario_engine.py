@@ -8,29 +8,19 @@ def confidence_label(prob):
     else:
         return "Low"
 
-
-def score_scenarios(trend, funding, oi_trend, overextended, mode="Intraday"):
+def score_scenarios(trend, funding, oi_trend, rsi):
 
     scenarios = []
 
-    # ==========================
-    # PULLBACK CONTINUATION
-    # ==========================
     score = 0
-
     if trend == "Uptrend":
         score += 2
     if oi_trend == "Rising":
         score += 1.5
-
     if funding > 0.03:
         score -= 1
-
-    if overextended:
+    if rsi >= 70:
         score -= 0.5
-
-    if mode == "Scalping":
-        score -= 0.5  # less weight on macro pullback
 
     prob = max(min(50 + score * 5, 90), 10)
 
@@ -38,22 +28,14 @@ def score_scenarios(trend, funding, oi_trend, overextended, mode="Intraday"):
         "name": "Pullback Continuation",
         "probability": prob,
         "confidence": confidence_label(prob),
-        "reason": "Trend intact + OI support; funding & extension reduce conviction."
+        "reason": "Trend structure intact with OI participation."
     })
 
-    # ==========================
-    # LIQUIDITY FLUSH
-    # ==========================
     score = 0
-
     if funding > 0.03:
         score += 1.5
-
-    if oi_trend == "Rising":
+    if rsi >= 70:
         score += 1
-
-    if trend == "Uptrend":
-        score -= 1
 
     prob = max(min(40 + score * 5, 80), 10)
 
@@ -64,19 +46,11 @@ def score_scenarios(trend, funding, oi_trend, overextended, mode="Intraday"):
         "reason": "Crowded positioning may trigger short-term sweep."
     })
 
-    # ==========================
-    # LATE BREAKOUT
-    # ==========================
     score = 0
-
     if trend == "Uptrend":
         score += 1
-
-    if overextended:
+    if rsi >= 75:
         score -= 1
-
-    if mode == "Scalping":
-        score += 1  # breakout more relevant in scalp
 
     prob = max(min(35 + score * 5, 75), 5)
 
@@ -84,22 +58,7 @@ def score_scenarios(trend, funding, oi_trend, overextended, mode="Intraday"):
         "name": "Late Breakout",
         "probability": prob,
         "confidence": confidence_label(prob),
-        "reason": "Breakout possible but extension increases risk."
+        "reason": "Breakout possible but extension risk exists."
     })
 
-    scenarios = sorted(scenarios, key=lambda x: x["probability"], reverse=True)
-    return scenarios
-
-
-def recommended_action(primary_scenario):
-    name = primary_scenario["name"]
-    prob = primary_scenario["probability"]
-
-    if name == "Pullback Continuation":
-        return "Pullback preferred; avoid chasing breakout at resistance."
-    elif name == "Liquidity Flush":
-        return "Downside liquidity sweep possible; counter-trend risk elevated."
-    elif name == "Late Breakout":
-        return "Breakout viable but extension risk present."
-    else:
-        return "No strong directional edge."
+    return sorted(scenarios, key=lambda x: x["probability"], reverse=True)
