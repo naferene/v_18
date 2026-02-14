@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys
+sys.path.append(os.path.dirname(__file__))
+
 
 from engine.state_manager import load_state, save_state, reset_daily_if_needed, update_streak
 from engine.behavior_engine import calculate_behavior
